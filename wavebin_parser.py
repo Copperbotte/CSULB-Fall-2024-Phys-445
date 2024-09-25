@@ -189,3 +189,12 @@ def parse(path, Print=False):
         data[:,n] = wave
 
     return data
+
+if __name__ == '__main__':
+    import matplotlib.pyplot as plt
+    data = parse('wavebin_parser.py_test.bin', Print=True)
+
+    fig, ax = plt.subplots()
+    for channel in data.T[1:]:
+        ax.scatter(data.T[0], channel, s=1, alpha=0.1)
+    plt.show()
