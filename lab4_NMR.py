@@ -186,13 +186,13 @@ def fit_T1(T1_data):
         grad[0] = -np.sum(movable*(T1M - y_adj))
         grad /= waves.size
 
-        #grad = adagrad(i, grad, grad_m, grad_v, β1=0.99, β2=0.999)
-        #params -= 5e-3 * grad
+        grad = adagrad(i, grad, grad_m, grad_v, β1=0.99, β2=0.999)
+        params -= 5e-3 * grad
 
         # Used with the animation
-        grad = adagrad(i, grad, grad_m, grad_v, β1=0.5, β2=0.9)
-        params[:-2] -= 1e-4 * grad[:-2]
-        params[-2:] *= np.exp(-1e-3*grad[-2:])
+        #grad = adagrad(i, grad, grad_m, grad_v, β1=0.5, β2=0.9)
+        #params[:-2] -= 1e-4 * grad[:-2]
+        #params[-2:] *= np.exp(-1e-3*grad[-2:])
         
     print(f'{params = }')
     print(f'{np.linalg.norm(grad) = }')
@@ -246,5 +246,57 @@ def compute_T1():
     plot_T1_3d()
     globals().update(locals())
 
+def load_T2():
+    # Magic numbers
+    # Minimum thresholds for each channel
+    dch0, dch1 = 0.003981947898864746, 0.07901215553283691
+    dch = np.array([dch0, dch1])
+
+    waves = []
+    with Timer("T2 dataset loaded"):
+        for n in range(8):
+            path = "09_20_2024/T2/RigolDS%d.bin"%n
+            wave = wavebin_parser.parse(path)
+            
+            wave = wave[84000:]
+
+            #noise = (np.random.random(wave[:, 1:].shape)-1/2) * dch
+            #wave[:, 1:] += noise
+            waves.append(wave)
+
+    return waves
+
+def plot_T2(T2_data):
+
+    fig, ax = plt.subplots()
+    for w in T2_data:
+    
+        t, ch0, ch1 = w.T
+        ax.plot(t, ch0)
+
+    ax.set_xbound(0, 0.3)
+
+    plt.show()
+
+def plot_T2_spectra(T2_data):
+    fig, ax = plt.subplots()
+    
+    for w in T2_data:
+        t, ch0, ch1 = w.T
+        k = np.fft.fftfreq(len(t), t[1]-t[0])
+        fft = np.fft.fft(ch0)
+        ax.scatter(np.abs(k), np.real(np.abs(fft)), s=1, alpha=0.1)
+
+    #ax.set_xscale('log')
+    ax.set_yscale('log')
+
+    plt.show()
+
+def compute_T2():
+    T2_data = load_T2()
+    #plot_T2(T2_data)
+    plot_T2_spectra(T2_data)
+
 if __name__ == '__main__':
-    compute_T1()
+    #compute_T1()
+    compute_T2()
