@@ -264,15 +264,110 @@ def load_T2():
             #wave[:, 1:] += noise
             waves.append(wave)
 
-    return waves
+    return np.array([w[:, :2] for w in waves[:6]])
 
-def plot_T2(T2_data):
+@njit
+def T2_model(params, tf, tn, t):
+    A, C, P, τ, σ = params
+    #return C + A*np.power(P, tn)/(1+B*((tf-τ)/σ)**2)
+    return C + A*np.exp(-t/P)/(1+((tf-τ)/σ)**2)
+
+@njit
+def T2_model_grad(params, tf, tn, t, T2M, y):
+    A, C, P, τ, σ = params
+
+    err = T2M - y
+    dA = (T2M - C)/A
+    #dP = (T2M - C) * tn/P
+    dP = (T2M - C) * (t/P**2)
+    dC = tf*0 + 1
+    
+    tt = (tf-τ)/σ
+    D = 1+tt**2
+    dM_dD = -(T2M - C)/D
+
+    dD_dtt = 2*tt
+    dτ = dM_dD * dD_dtt * (-1/σ)
+    dσ = dM_dD * dD_dtt * (-tt/σ)
+
+    #grad = np.array([dA, dC, dP, dτ, dσ], np.float64)
+    grad = np.empty((len(params), err.shape[0], err.shape[1]))
+    grad[0] = dA
+    grad[1] = dC
+    grad[2] = dP
+    grad[3] = dτ
+    grad[4] = dσ
+
+    result = np.zeros_like(params)
+    for t in range(err.shape[1]):
+        for n in range(err.shape[0]):
+            for p in range(len(params)):
+                result[p] += err[n,t] * grad[p,n,t]
+
+    return result
+    
+    #return grad @ err
+    #return np.einsum('nt,pnt->p', err, grad)
+
+def fit_T2(T2_data):
+    params = np.random.random(5)
+    grad_m = np.zeros_like(params)
+    grad_v = np.ones_like(params)
+
+    params = np.array([
+        #A, C, P, τ, σ = params
+        #0.266, 0.01, 0.0949, 0.005, 0.0005
+        #$1, 0.001, 0.1035, 0.005, 0.001
+        2.432559e-01, 9.000208e-03, 1.028314e-01, 5.022274e-03, 5.596152e-04
+    ])
+
+    T2_data = T2_data[:, :60000]
+    T2_data = T2_data[:, ::100]
+    
+    t, ch0 = T2_data.transpose(2,0,1)
+
+    tp = 0.01
+    tf, tn = np.modf(t/tp)
+    tf *= tp
+
+    N = 100000
+    
+    for i in range(N):
+        T2M = T2_model(params, tf, tn, t)
+        loss = np.var(T2M - ch0)
+
+        #if i%(N//25) == 0:
+        if i%(N//100) == 0:
+            print(i, '%.6e'%loss, '***', *('%.6e,'%p for p in params))
+        
+        grad = T2_model_grad(params, tf, tn, t, T2M, ch0)
+        # grad += np.random.normal(size=params.shape) * np.abs(params)*1e-3
+        grad = adagrad(i, grad, grad_m, grad_v, β1=0.9, β2=0.99)
+        grad = grad * [1,1,1,1,1e-6]
+        grad /= T2_data[0].size
+        params -= 1e-3 * grad
+
+        #if i%(N//10) == 0:
+        #    #print(i, loss, '***', *params)
+        #    Params[i//10+1] = params
+        
+        #params[:-2] -= 1e-2 * grad[:-2]
+        #params[-2:] *= np.exp(-1e-2*grad[-2:])
+    return params
+
+def plot_T2(T2_data, params):
 
     fig, ax = plt.subplots()
-    for w in T2_data:
+    for w in T2_data[:1]:
     
-        t, ch0, ch1 = w.T
+        t, ch0 = w.T
         ax.plot(t, ch0)
+
+    t0 = np.linspace(0, 1, 1000001)
+    tp = 0.01
+    tf, tn = np.modf(t0/tp)
+    tf *= tp
+    ax.plot(t0, T2_model(params, tf, tn, t0))
 
     ax.set_xbound(0, 0.3)
 
@@ -282,7 +377,7 @@ def plot_T2_spectra(T2_data):
     fig, ax = plt.subplots()
     
     for w in T2_data:
-        t, ch0, ch1 = w.T
+        t, ch0 = w.T
         k = np.fft.fftfreq(len(t), t[1]-t[0])
         fft = np.fft.fft(ch0)
         ax.scatter(np.abs(k), np.real(np.abs(fft)), s=1, alpha=0.1)
@@ -294,7 +389,9 @@ def plot_T2_spectra(T2_data):
 
 def compute_T2():
     T2_data = load_T2()
-    #plot_T2(T2_data)
+    #params = fit_T2(T2_data)
+    params = np.array([2.432379e-01, 8.994032e-03, 1.033462e-01, 5.022145e-03, 5.595870e-04])
+    #plot_T2(T2_data, params)
     plot_T2_spectra(T2_data)
 
 if __name__ == '__main__':
