@@ -24,6 +24,8 @@ def func(theta):
 theta = np.linspace(0, 4*np.pi, 1000)
 r = func(theta)
 
+def halting(n):
+	return n
 
 fig, ax = plt.subplots(subplot_kw=dict(projection='polar'))
 ax.plot(theta, r)
